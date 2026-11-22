@@ -1,0 +1,193 @@
+---
+title: "Get COI sequences for the scorpion genus Tityus"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Get COI sequences for the scorpion genus Tityus}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+This vignette shows the full gbscan pipeline. The example gets the COI sequences of the scorpion genus *Tityus* (Buthidae) from GenBank. The pipeline has five steps:
+
+1.  Examine the marker dictionary.
+2.  Count the records.
+3.  Download the records.
+4.  Read the metadata and filter the records.
+5.  Write the sequences to FASTA files.
+
+The code in this vignette needs an internet connection. The vignette does not run the code when the package is built.
+
+```{r}
+library(gbscan)
+library(dplyr)
+```
+
+## Before you start: get an NCBI API key
+
+NCBI accepts 3 requests per second without a key. With a key, NCBI accepts 10 requests per second. Large downloads are faster with a key.
+
+1.  Make an NCBI account at <https://www.ncbi.nlm.nih.gov/account/>.
+2.  Go to the account settings and make an API key.
+3.  Open your `.Renviron` file with `usethis::edit_r_environ()`.
+4.  Add the line `ENTREZ_KEY=your_key`.
+5.  Save the file and restart R.
+
+Do not write the key in a script. A script can go to other persons or to a public repository.
+
+## Step 1: examine the marker dictionary
+
+The dictionary tells gbscan how to search for each marker and how to identify the marker in a record.
+
+```{r}
+dict <- gb_dictionary()
+dict
+
+dict |>
+  filter(marker == "COI") |>
+  pull(query)
+```
+
+The `query` column has the GenBank search terms. The `regex` column has the pattern that identifies COI in the features of a record.
+
+To change the dictionary, write a copy to a CSV file, edit the file, and read it again:
+
+```{r}
+gb_dictionary("my_markers.csv", write = TRUE)
+# Edit my_markers.csv in a text editor or spreadsheet program.
+dict <- gb_dictionary("my_markers.csv")
+```
+
+## Step 2: count the records
+
+Count the records before you download them. Then you know the size of the download.
+
+```{r}
+counts <- gb_count(taxa = "Tityus", markers = c("COI", "mitogenome"))
+```
+
+The function prints the counts with shortened queries. The saved result has the full queries. You can paste a query into the GenBank web page to examine the results:
+
+```{r}
+counts$query
+```
+
+The `mitogenome` marker finds complete mitochondrial genomes. Many mitogenomes do not have the COI terms in their title. Include `mitogenome` to get the COI sequences from these genomes too.
+
+## Step 3: download the records
+
+```{r}
+gb_download(
+  taxa = "Tityus",
+  markers = c("COI", "mitogenome"),
+  dir = "tityus_data",
+  batch = 500
+)
+```
+
+The function saves the files in `tityus_data/genbank/`. It also downloads the NCBI Taxonomy data for the records.
+
+If the download stops, run the same command again. The function continues from the last complete batch. This is important for large downloads (for example, tens of thousands of records).
+
+To get records that were added to GenBank after your download, remove the file `ids.txt` in the folder of the query. Then run the command again. The function downloads only the new records.
+
+## Step 4: read the metadata and filter the records
+
+```{r}
+meta <- gb_parse_meta("tityus_data")
+records <- meta$records
+features <- meta$features
+```
+
+`records` has one row for each record. It has the taxonomic ranks (species, genus, tribe, subfamily, family, order, class, phylum), the specimen data, and the reference data.
+
+`features` has one row for each gene-level feature. The `marker` column shows the marker that gbscan found for the feature.
+
+NCBI Taxonomy often has no tribe or subfamily for invertebrates. Use the `ranks` argument to fill the empty ranks from a second database, for example GBIF:
+
+```{r}
+meta <- gb_parse_meta("tityus_data", ranks = "gbif")
+records <- meta$records
+
+records |>
+  count(subfamily, filled_ranks)
+```
+
+The function looks up each genus one time and saves the results in `tityus_data/ranks_gbif.csv`. It fills only empty ranks. The column `filled_ranks` shows the ranks that came from GBIF.
+
+Examine the features without a marker:
+
+```{r}
+features |>
+  filter(is.na(marker)) |>
+  count(gene, product, sort = TRUE)
+```
+
+If a feature is COI but has no marker, change the COI regular expression in the dictionary. Then run `gb_parse_meta()` again. You do not have to download again.
+
+Join the two tables and select the COI sequences:
+
+```{r}
+coi <- features |>
+  filter(marker == "COI") |>
+  left_join(records, by = "accession")
+```
+
+Keep only identified species, sequences of 500 bp or more, and the longest sequence of each species:
+
+```{r}
+best <- coi |>
+  filter(
+    !is.na(species),
+    !grepl(" (sp|cf|aff|nr)\\.", species),
+    feature_length >= 500
+  ) |>
+  arrange(desc(feature_length)) |>
+  distinct(species, .keep_all = TRUE)
+
+nrow(best)
+```
+
+Save the tables for later use:
+
+```{r}
+saveRDS(meta, "tityus_meta.rds")
+```
+
+## Step 5: write the sequences to FASTA files
+
+Write the selected sequences. The `keep` argument gives the features to write. The `header` argument gives the columns for the FASTA headers.
+
+```{r}
+gb_parse_fasta(
+  dir = "tityus_data",
+  out_dir = "fasta",
+  keep = best,
+  header = c("accession", "species", "country")
+)
+```
+
+The function writes the file `fasta/COI/COI.fasta`. Each marker gets its own folder.
+
+The function cuts the COI gene from the mitogenomes. To write the full record sequences, use `region = "record"`.
+
+Align the sequences with an alignment program, for example MAFFT:
+
+``` sh
+mafft --auto fasta/COI/COI.fasta > fasta/COI/COI_aligned.fasta
+```
+
+## More taxa and markers
+
+All functions accept more than one taxon and more than one marker. For example, this command downloads the common Sanger markers for two genera:
+
+```{r}
+gb_download(
+  taxa = c("Tityus", "Centruroides"),
+  markers = c("COI", "12S", "16S", "18S", "28S", "mitogenome"),
+  dir = "buthidae_data"
+)
+```

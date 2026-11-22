@@ -1,0 +1,22 @@
+url: https://EDIT-ME.github.io/gbscan/
+template:
+  bootstrap: 5
+
+reference:
+  - title: Marker dictionary
+    contents:
+      - gb_dictionary
+  - title: Count and download
+    contents:
+      - gb_count
+      - gb_download
+  - title: Parse
+    contents:
+      - gb_parse_meta
+      - gb_parse_fasta
+
+articles:
+  - title: Get started
+    navbar: ~
+    contents:
+      - tityus-coi

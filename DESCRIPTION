@@ -1,0 +1,38 @@
+Package: gbscan
+Title: Scan GenBank for Genetic Markers
+Version: 0.0.0.9000
+Authors@R:
+    person("Stenio I. A.", "Foerster", , "EDIT-ME@example.org", role = c("aut", "cre", "cph"))
+Description: Counts and downloads nucleotide records for genetic markers
+    and taxa from GenBank (NCBI). Downloads run in batches, can resume after
+    an interruption, and can hold more than 50,000 records for one taxon
+    and marker. The parsers write record and feature metadata to two
+    tibbles, add taxonomic ranks from the NCBI Taxonomy database, and write
+    the sequences of each marker to FASTA files. A marker dictionary is
+    supplied with the package. The user can edit it to add or change
+    markers.
+URL: https://EDIT-ME.github.io/gbscan/
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.1.0)
+Imports:
+    cli,
+    dplyr,
+    httr2,
+    rlang,
+    tibble,
+    stats,
+    stringr,
+    utils,
+    xml2
+Suggests:
+    knitr,
+    rmarkdown,
+    taxize,
+    testthat (>= 3.0.0),
+    withr
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.1
